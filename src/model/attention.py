@@ -104,7 +104,9 @@ def rank_tokens_by_gradient_x_input(
     target_logit = outputs.logits[0, target_label]
     gradients = torch.autograd.grad(target_logit, input_embeddings)[0][0].detach().cpu()
     embeddings = input_embeddings[0].detach().cpu()
-    scores = (gradients * embeddings).sum(dim=-1).numpy()
+    # Rank by attribution magnitude so strongly inhibitory tokens are treated as
+    # important instead of being pushed to the bottom by their negative sign.
+    scores = np.abs((gradients * embeddings).sum(dim=-1).numpy())
     scores_by_position = {
         position: float(scores[position])
         for position, _ in candidates

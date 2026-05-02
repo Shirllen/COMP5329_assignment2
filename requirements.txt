@@ -7,3 +7,4 @@ pandas>=2.2,<3.0
 plotly>=6.0,<7.0
 kaleido>=1.0,<2.0
 tqdm>=4.66,<5.0
+nbformat>=4.2.0,<6.0

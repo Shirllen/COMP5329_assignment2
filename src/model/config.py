@@ -56,7 +56,7 @@ class AnalysisConfig:
     max_length: Optional[int] = None
     seed: Optional[int] = None
     sample_size: int = 200
-    analysis_subset: AnalysisSubset = "correct_only"
+    analysis_subset: AnalysisSubset = "all"
     top_k_values: Sequence[int] = field(default_factory=lambda: [1, 2, 3])
     top_ratios: Sequence[float] = field(default_factory=list)
     random_trials: int = 5

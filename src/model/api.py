@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 import torch
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -186,7 +187,19 @@ def _dataframe_to_markdown(dataframe: pd.DataFrame, float_columns: Sequence[str]
     return "\n".join(lines)
 
 
+def _announce(stage: str, message: str) -> None:
+    print(f"[{stage}] {message}", flush=True)
+
+
 def train(config: TrainConfig) -> TrainResult:
+    _announce(
+        "Train",
+        (
+            f"Starting fine-tuning with model={config.model_name}, epochs={config.num_train_epochs}, "
+            f"train_batch_size={config.per_device_train_batch_size}, eval_batch_size={config.per_device_eval_batch_size}, "
+            f"seed={config.seed}"
+        ),
+    )
     set_global_seed(config.seed)
 
     checkpoint_dir = ensure_dir(config.output_dir)
@@ -198,12 +211,19 @@ def train(config: TrainConfig) -> TrainResult:
         seed=config.seed,
     )
 
+    _announce("Train", f"Loading SST-2 dataset from cache_dir={config.cache_dir}")
     raw_datasets = load_sst2_dataset(cache_dir=config.cache_dir)
+    _announce("Train", "Loading tokenizer and tokenizing dataset")
     tokenizer = AutoTokenizer.from_pretrained(config.model_name, cache_dir=config.cache_dir, use_fast=True)
     tokenized_datasets = tokenize_sst2(raw_datasets, tokenizer=tokenizer, max_length=config.max_length)
     train_dataset = maybe_select_subset(tokenized_datasets["train"], config.max_train_examples)
     eval_dataset = maybe_select_subset(tokenized_datasets["validation"], config.max_eval_examples)
+    _announce(
+        "Train",
+        f"Prepared datasets: train_examples={len(train_dataset)}, validation_examples={len(eval_dataset)}",
+    )
 
+    _announce("Train", "Loading pretrained model")
     model = AutoModelForSequenceClassification.from_pretrained(
         config.model_name,
         cache_dir=config.cache_dir,
@@ -236,6 +256,7 @@ def train(config: TrainConfig) -> TrainResult:
         optim="adamw_torch",
         report_to="none",
         remove_unused_columns=True,
+        disable_tqdm=False,
     )
 
     trainer = Trainer(
@@ -248,8 +269,11 @@ def train(config: TrainConfig) -> TrainResult:
         compute_metrics=compute_metrics,
     )
 
+    _announce("Train", "Launching Trainer.train(); progress bar will update during optimization")
     train_output = trainer.train()
+    _announce("Train", "Running final validation on the selected eval split")
     evaluation_metrics = trainer.evaluate(eval_dataset=eval_dataset)
+    _announce("Train", f"Saving checkpoint to {checkpoint_dir}")
     trainer.save_model(str(checkpoint_dir))
     tokenizer.save_pretrained(str(checkpoint_dir))
 
@@ -293,6 +317,13 @@ def train(config: TrainConfig) -> TrainResult:
     if trainer.state.best_model_checkpoint:
         best_checkpoint_dir = Path(trainer.state.best_model_checkpoint)
 
+    _announce(
+        "Train",
+        (
+            f"Completed training. best_metric={trainer.state.best_metric}, "
+            f"best_checkpoint={best_checkpoint_dir or checkpoint_dir}, metrics_path={metrics_path}"
+        ),
+    )
     return TrainResult(
         checkpoint_dir=checkpoint_dir,
         metrics_dir=metrics_dir,
@@ -304,6 +335,7 @@ def train(config: TrainConfig) -> TrainResult:
 
 
 def evaluate(config: EvalConfig) -> EvalResult:
+    _announce("Eval", f"Starting evaluation for checkpoint_dir={config.checkpoint_dir} on split={config.split}")
     cache_dir, max_length, seed = _resolve_runtime_overrides(
         metrics_dir=config.metrics_dir,
         cache_dir=config.cache_dir,
@@ -312,15 +344,19 @@ def evaluate(config: EvalConfig) -> EvalResult:
     )
     set_global_seed(seed)
 
+    _announce("Eval", f"Loading SST-2 split with cache_dir={cache_dir}")
     raw_datasets = load_sst2_dataset(cache_dir=cache_dir)
     raw_split = maybe_select_subset(raw_datasets[config.split], config.max_eval_examples)
 
+    _announce("Eval", "Loading tokenizer and checkpoint")
     tokenizer = AutoTokenizer.from_pretrained(config.checkpoint_dir, use_fast=True)
     model = AutoModelForSequenceClassification.from_pretrained(config.checkpoint_dir)
     device = _resolve_device()
     model.to(device)
     model.eval()
+    _announce("Eval", f"Using device={device}; num_examples={len(raw_split)}")
 
+    _announce("Eval", "Tokenizing evaluation split")
     tokenized_split = tokenize_sst2(raw_split, tokenizer=tokenizer, max_length=max_length)
     tokenized_split.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -334,7 +370,8 @@ def evaluate(config: EvalConfig) -> EvalResult:
     all_logits = []
     all_labels = []
     losses = []
-    for batch in data_loader:
+    progress_bar = tqdm(data_loader, total=len(data_loader), desc=f"Evaluating {config.split}", unit="batch")
+    for batch_idx, batch in enumerate(progress_bar, start=1):
         labels = batch["labels"].to(device)
         model_inputs = {
             "input_ids": batch["input_ids"].to(device),
@@ -346,6 +383,8 @@ def evaluate(config: EvalConfig) -> EvalResult:
         all_logits.append(outputs.logits.detach().cpu().numpy())
         all_labels.append(labels.detach().cpu().numpy())
         losses.append(float(outputs.loss.detach().cpu().item()))
+        if batch_idx == 1 or batch_idx % 10 == 0 or batch_idx == len(data_loader):
+            progress_bar.set_postfix(avg_loss=f"{np.mean(losses):.4f}")
 
     logits = np.concatenate(all_logits, axis=0)
     labels = np.concatenate(all_labels, axis=0)
@@ -377,6 +416,13 @@ def evaluate(config: EvalConfig) -> EvalResult:
     metrics_path = metrics_dir / f"{config.split}_metrics.json"
     predictions_df.to_csv(predictions_path, index=False)
     write_json(metrics_path, metrics)
+    _announce(
+        "Eval",
+        (
+            f"Completed evaluation. accuracy={metrics['accuracy']:.4f}, f1={metrics['f1']:.4f}, "
+            f"loss={metrics['loss']:.4f}, metrics_path={metrics_path}"
+        ),
+    )
 
     return EvalResult(
         checkpoint_dir=Path(config.checkpoint_dir),
@@ -388,6 +434,14 @@ def evaluate(config: EvalConfig) -> EvalResult:
 
 
 def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
+    _announce(
+        "Analysis",
+        (
+            f"Starting token-importance analysis with sample_size={config.sample_size}, "
+            f"analysis_subset={config.analysis_subset}, top_k_values={list(config.top_k_values)}, "
+            f"random_trials={config.random_trials}"
+        ),
+    )
     analysis_subset = normalize_analysis_subset(config.analysis_subset)
     cache_dir, max_length, seed = _resolve_runtime_overrides(
         metrics_dir=config.metrics_dir,
@@ -406,6 +460,7 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
     analysis_dir = ensure_dir(config.analysis_dir)
     ranking_methods = ["attention", "grad_x_input", "loo"]
 
+    _announce("Analysis", "Loading tokenizer and checkpoint for analysis")
     tokenizer = AutoTokenizer.from_pretrained(config.checkpoint_dir, use_fast=True)
     model = AutoModelForSequenceClassification.from_pretrained(
         config.checkpoint_dir,
@@ -414,12 +469,21 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
     device = _resolve_device()
     model.to(device)
     model.eval()
+    _announce("Analysis", f"Using device={device}")
 
+    _announce("Analysis", f"Loading validation split from cache_dir={cache_dir}")
     raw_validation = load_sst2_dataset(cache_dir=cache_dir)["validation"]
     raw_validation = maybe_select_subset(raw_validation, config.max_validation_examples)
+    _announce("Analysis", f"Scanning {len(raw_validation)} validation examples to build the candidate pool")
 
     candidate_examples = []
-    for idx, example in enumerate(raw_validation):
+    filter_progress = tqdm(
+        enumerate(raw_validation),
+        total=len(raw_validation),
+        desc="Filtering analysis candidates",
+        unit="example",
+    )
+    for idx, example in filter_progress:
         encoded = tokenizer(
             example["sentence"],
             truncation=True,
@@ -439,6 +503,8 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
                 "correct": correct,
             }
         )
+        if idx == 0 or (idx + 1) % 50 == 0 or (idx + 1) == len(raw_validation):
+            filter_progress.set_postfix(candidates=len(candidate_examples))
 
     if not candidate_examples:
         raise ValueError("No validation examples available for analysis after filtering.")
@@ -446,6 +512,10 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
     rng = random.Random(seed)
     sample_size = min(config.sample_size, len(candidate_examples))
     sampled_examples = rng.sample(candidate_examples, sample_size)
+    _announce(
+        "Analysis",
+        f"Candidate pool ready: {len(candidate_examples)} examples; sampled {len(sampled_examples)} for ranking and deletion analysis",
+    )
 
     selection_rows = []
     attention_rows = []
@@ -454,7 +524,13 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
     deletion_rows = []
     case_rows = []
 
-    for sample in sampled_examples:
+    sample_progress = tqdm(
+        sampled_examples,
+        total=len(sampled_examples),
+        desc="Analyzing sampled examples",
+        unit="sample",
+    )
+    for sample_idx, sample in enumerate(sample_progress, start=1):
         label = int(sample["label"])
         encoded = tokenizer(
             sample["sentence"],
@@ -670,6 +746,8 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
 
         if primary_case_record is not None:
             case_rows.append(primary_case_record)
+        if sample_idx == 1 or sample_idx % 10 == 0 or sample_idx == len(sampled_examples):
+            sample_progress.set_postfix(records=len(deletion_rows))
 
     if not deletion_rows:
         raise ValueError("Deletion analysis produced no records.")
@@ -762,7 +840,7 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
         "# Qualitative Importance Cases",
         "",
         "Attention importance is defined as the last-layer mean attention from `[CLS]` to each non-special token.",
-        "Gradient × input is computed against the original predicted-class logit.",
+        "Gradient × input is computed against the original predicted-class logit and ranked by absolute attribution magnitude.",
         "Leave-one-out importance is defined as the drop in original predicted-class probability after deleting one token at a time.",
         "Tokens remain in wordpiece form for this DistilBERT SST-2 implementation.",
         "",
@@ -833,12 +911,19 @@ def run_attention_analysis(config: AnalysisConfig) -> AnalysisResult:
             "ranking_methods": ranking_methods,
             "importance_definitions": {
                 "attention": "Mean attention over heads in the last layer, using the [CLS] query to score non-special tokens.",
-                "grad_x_input": "Gradient × input against the original predicted-class logit, aggregated across embedding dimensions.",
+                "grad_x_input": "Absolute gradient × input attribution magnitude against the original predicted-class logit, aggregated across embedding dimensions.",
                 "loo": "Drop in original predicted-class probability after deleting one token at a time.",
             },
             "ranking_similarity_metric": "Spearman rank correlation over shared non-special token positions.",
             "token_granularity": "wordpiece",
         },
+    )
+    _announce(
+        "Analysis",
+        (
+            f"Completed analysis. similarity_summary={ranking_similarity_summary_path}, "
+            f"deletion_summary={deletion_summary_path}, qualitative_cases={qualitative_cases_path}"
+        ),
     )
 
     return AnalysisResult(
