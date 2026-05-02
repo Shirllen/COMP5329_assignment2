@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -259,22 +258,18 @@ def _apply_figure_style(fig: go.Figure, *, height: int | None = None) -> go.Figu
     return fig
 
 
-def _wrap_for_title(text: str, width: int = 90) -> str:
-    return "<br>".join(textwrap.wrap(str(text), width=width))
-
-
 def plot_experiment_workflow() -> go.Figure:
     fig = go.Figure()
-    fig.update_xaxes(visible=False, range=[0, 10])
-    fig.update_yaxes(visible=False, range=[0, 10])
+    fig.update_xaxes(visible=False, range=[0, 12.5], fixedrange=True)
+    fig.update_yaxes(visible=False, range=[0, 10], fixedrange=True)
 
     boxes = [
-        (0.3, 7.0, 1.8, 8.6, "Fine-tune DistilBERT\nacross 4 seeds"),
-        (2.3, 7.0, 4.0, 8.6, "Run validation\npredictions"),
-        (4.5, 7.0, 6.4, 8.6, "Compute token rankings\nattention / grad×input / LOO"),
-        (6.9, 7.0, 8.6, 8.6, "Compare rankings\nwith Spearman"),
-        (6.9, 4.2, 8.6, 5.8, "Delete top tokens\nand measure impact"),
-        (4.5, 1.4, 6.4, 3.0, "Summarize quantitative\nand qualitative findings"),
+        (0.4, 6.7, 2.7, 8.7, "Fine-tune<br>DistilBERT<br>(4 seeds)"),
+        (3.2, 6.7, 5.5, 8.7, "Run validation<br>predictions"),
+        (6.0, 6.7, 9.0, 8.7, "Rank tokens with<br>attention, grad×input,<br>and LOO"),
+        (9.5, 6.7, 12.0, 8.7, "Compare rankings<br>with Spearman"),
+        (9.5, 3.6, 12.0, 5.6, "Delete top tokens<br>and measure impact"),
+        (6.1, 0.8, 8.9, 2.8, "Summarize<br>findings"),
     ]
     for x0, y0, x1, y1, label in boxes:
         fig.add_shape(
@@ -287,14 +282,21 @@ def plot_experiment_workflow() -> go.Figure:
             fillcolor="#E9F1F7",
             layer="below",
         )
-        fig.add_annotation(x=(x0 + x1) / 2, y=(y0 + y1) / 2, text=label, showarrow=False, font={"size": 14})
+        fig.add_annotation(
+            x=(x0 + x1) / 2,
+            y=(y0 + y1) / 2,
+            text=label,
+            showarrow=False,
+            font={"size": 13},
+            align="center",
+        )
 
     arrows = [
-        ((1.8, 7.8), (2.3, 7.8)),
-        ((4.0, 7.8), (4.5, 7.8)),
-        ((6.4, 7.8), (6.9, 7.8)),
-        ((7.75, 7.0), (7.75, 5.8)),
-        ((6.9, 4.2), (6.4, 3.0)),
+        ((2.7, 7.7), (3.2, 7.7)),
+        ((5.5, 7.7), (6.0, 7.7)),
+        ((9.0, 7.7), (9.5, 7.7)),
+        ((10.75, 6.7), (10.75, 5.6)),
+        ((9.5, 3.6), (8.9, 2.8)),
     ]
     for (x0, y0), (x1, y1) in arrows:
         fig.add_annotation(
@@ -314,8 +316,9 @@ def plot_experiment_workflow() -> go.Figure:
             text="",
         )
 
-    fig.update_layout(title="Experiment workflow for the attention-vs-importance study")
-    return _apply_figure_style(fig, height=520)
+    fig = _apply_figure_style(fig, height=420)
+    fig.update_layout(width=1400, margin={"l": 20, "r": 20, "t": 10, "b": 10}, title=None)
+    return fig
 
 
 def plot_validation_metrics_overview(validation_metrics_df: pd.DataFrame) -> go.Figure:
@@ -430,16 +433,16 @@ def plot_qualitative_case_rankings(
     validation_index: int,
     top_n_tokens: int = 8,
 ) -> go.Figure:
-    prediction_row = validation_predictions_df[validation_predictions_df["validation_index"] == validation_index]
-    if prediction_row.empty:
+    if validation_predictions_df[validation_predictions_df["validation_index"] == validation_index].empty:
         raise ValueError(f"validation_index={validation_index} was not found in validation_predictions.csv")
-    prediction_row = prediction_row.iloc[0]
 
+    subplot_titles = ["Attention", "Grad \u00d7 Input", "LOO"]
     fig = make_subplots(
         rows=1,
         cols=3,
-        subplot_titles=[METHOD_LABELS[method] for method in SIMILARITY_METHOD_ORDER],
-        horizontal_spacing=0.08,
+        subplot_titles=subplot_titles,
+        horizontal_spacing=0.14,
+        column_widths=[0.31, 0.31, 0.38],
     )
 
     for col_index, method in enumerate(SIMILARITY_METHOD_ORDER, start=1):
@@ -455,31 +458,35 @@ def plot_qualitative_case_rankings(
         if method_frame.empty:
             continue
         method_frame = method_frame.iloc[::-1]
+        method_frame["display_token"] = [
+            f"#{int(rank)} {token}"
+            for rank, token in zip(method_frame["rank"], method_frame["token"], strict=False)
+        ]
         fig.add_trace(
             go.Bar(
                 x=method_frame["importance_score"],
-                y=method_frame["token"],
+                y=method_frame["display_token"],
                 orientation="h",
                 marker_color=METHOD_COLORS[method],
-                text=[f"#{int(rank)}" for rank in method_frame["rank"]],
-                textposition="outside",
                 showlegend=False,
             ),
             row=1,
             col=col_index,
         )
-        fig.update_xaxes(title_text="Score", row=1, col=col_index)
+        fig.update_xaxes(title_text="Score", automargin=True, row=1, col=col_index)
         if col_index == 1:
-            fig.update_yaxes(title_text="Token", row=1, col=col_index)
+            fig.update_yaxes(title_text="Token", automargin=True, tickfont={"size": 11}, row=1, col=col_index)
+        else:
+            fig.update_yaxes(automargin=True, tickfont={"size": 11}, row=1, col=col_index)
 
-    title = (
-        f"Qualitative token ranking comparison for validation example {validation_index}<br>"
-        f"{_wrap_for_title(prediction_row['sentence'])}<br>"
-        f"Gold={prediction_row['label_name']} | Prediction={prediction_row['prediction_name']} | "
-        f"Confidence={float(prediction_row['confidence']):.4f}"
+    fig.update_annotations(font={"size": 14})
+    fig = _apply_figure_style(fig, height=560)
+    fig.update_layout(
+        title={"text": f"Validation example {validation_index} token rankings", "font": {"size": 18}},
+        width=1100,
+        margin={"l": 80, "r": 40, "t": 85, "b": 60},
     )
-    fig.update_layout(title=title)
-    return _apply_figure_style(fig, height=620)
+    return fig
 
 
 def generate_default_paper_figures(

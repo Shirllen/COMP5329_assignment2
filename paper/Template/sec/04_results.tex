@@ -7,8 +7,11 @@ Before analyzing token importance, we first verify that the classifier itself be
 
 \begin{table}[t]
 \centering
-\small
-\begin{tabular}{lccc}
+{
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lccc@{}}
 \toprule
 Seed & Accuracy & F1 & Loss \\
 \midrule
@@ -17,9 +20,11 @@ Seed & Accuracy & F1 & Loss \\
 44 & 0.9117 & 0.9108 & 0.2759 \\
 45 & 0.9002 & 0.9028 & 0.3766 \\
 \midrule
-Avg. $\pm$ std & 0.9074 $\pm$ 0.0052 & 0.9094 $\pm$ 0.0044 & 0.3295 $\pm$ 0.0372 \\
+Mean $\pm$ std & 0.9074 $\pm$ 0.0052 & 0.9094 $\pm$ 0.0044 & 0.3295 $\pm$ 0.0372 \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
+}
 \caption{Validation performance on SST-2 across four random seeds.}
 \label{tab:validation_metrics}
 \end{table}
@@ -73,6 +78,6 @@ The sentence contains the word \emph{compelling}, which LOO ranks first. Deletin
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\textwidth]{fig06_case_rankings_seed42_idx519.png}
-\caption{Qualitative comparison on validation example 519 from seed 42. The model predicts \emph{positive} with confidence $0.9983$, although the gold label is \emph{negative}. Attention peaks on punctuation, while LOO identifies \emph{compelling} as the token most responsible for the positive prediction.}
+\caption{Qualitative example 519 from seed 42. The model predicts \emph{positive} with confidence $0.9983$ although the gold label is \emph{negative}. Attention peaks on punctuation, whereas LOO identifies \emph{compelling} as the main driver of the error.}
 \label{fig:qualitative_case}
 \end{figure*}
