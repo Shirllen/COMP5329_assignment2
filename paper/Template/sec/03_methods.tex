@@ -1,0 +1,54 @@
+\section{Methods and Experimental Setup}
+\label{sec:methods}
+
+\subsection{Task, Model, and Training Setup}
+
+We study binary sentiment classification on the SST-2 task from GLUE~\cite{socher2013recursive,wang2018glue}. The base model is \texttt{distilbert-base-uncased}, a compact distilled version of BERT~\cite{sanh2019distilbert,devlin2019bert}. For each seed in $\{42, 43, 44, 45\}$, we fine-tune the model for $2$ epochs with learning rate $2\times 10^{-5}$, weight decay $0.01$, maximum sequence length $128$, training batch size $16$, and evaluation batch size $32$. We select the best checkpoint for each seed using validation accuracy. The analysis uses the full SST-2 validation split of $872$ examples rather than a small subsample.
+
+The implementation is organized as a notebook-driven interface over a modular Python pipeline. Training, evaluation, and interpretability analysis are handled by reusable functions, while saved artifacts include validation metrics, token rankings, ranking-similarity summaries, deletion records, and qualitative cases. Figure~\ref{fig:workflow} summarizes the workflow.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig01_experiment_workflow.png}
+\caption{Overview of the experiment pipeline. For each seed, we fine-tune DistilBERT on SST-2, run validation predictions, compute three token-importance rankings, compare the rankings with Spearman correlation, and evaluate them through token deletion.}
+\label{fig:workflow}
+\end{figure*}
+
+\subsection{Token-Importance Signals}
+
+For an input sequence $x$ with predicted label $\hat{y}$, we assign an importance score to each non-special token $i$ using three methods.
+
+\paragraph{Attention.}
+We use the final Transformer layer and average attention over heads. Let $A^{(L,h)}$ be the attention matrix of head $h$ in the last layer. We score token $i$ using the attention weight from the \texttt{[CLS]} query position:
+\begin{equation}
+s_i^{\text{attn}} = \frac{1}{H}\sum_{h=1}^{H} A^{(L,h)}_{\text{[CLS]},i}.
+\end{equation}
+This gives a simple summary of how strongly the sentence-level classification token attends to each input token.
+
+\paragraph{Gradient $\times$ input.}
+Let $e_i$ denote the embedding of token $i$ and $z_{\hat{y}}$ the logit of the model's predicted class. We compute
+\begin{equation}
+s_i^{\text{g}\times\text{x}} = \left|\left\langle e_i,\frac{\partial z_{\hat{y}}}{\partial e_i}\right\rangle\right|.
+\end{equation}
+We take the absolute value so that strongly supportive and strongly inhibitory tokens are both treated as important, following the magnitude-based use of gradient attributions~\cite{ancona2018towards}.
+
+\paragraph{Leave-one-out deletion.}
+For each token $i$, we delete that token once, re-run the model, and measure the drop in predicted-class probability:
+\begin{equation}
+s_i^{\text{loo}} = p_{\hat{y}}(x) - p_{\hat{y}}(x_{\setminus i}),
+\end{equation}
+where $x_{\setminus i}$ is the sequence after removing token $i$. This method directly estimates how much the current prediction depends on each token~\cite{li2017erasure}.
+
+\subsection{Evaluation Protocol}
+
+We evaluate the three rankings in two ways.
+
+\paragraph{Ranking agreement.}
+For each validation example, we compute pairwise Spearman correlation between the token rankings produced by the three methods. This measures whether different importance definitions rank tokens similarly.
+
+\paragraph{Deletion tests.}
+For each method, we delete the top-$k$ ranked tokens for $k \in \{1,2,3\}$ and compare the new prediction against the original one. We report two main metrics. The first is confidence drop,
+\begin{equation}
+\Delta c = \max_y p_y(x) - \max_y p_y(x_{\setminus S_k}),
+\end{equation}
+where $S_k$ is the selected token set. The second is prediction flip rate, i.e., the fraction of examples whose predicted label changes after deletion. We also keep a random deletion baseline by sampling tokens uniformly from the candidate token positions and averaging across $5$ random trials per example. Our main paper focuses on fixed top-$k$ deletion because it is the most interpretable and stable comparison across methods.

@@ -1,0 +1,6 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We revisited a simple but important interpretability question: do attention weights reflect token importance in a Transformer sentiment classifier? In a controlled DistilBERT-on-SST-2 setting with four random seeds, the answer is largely no. Attention shows only weak agreement with gradient $\times$ input and LOO rankings, and LOO-selected tokens are much more effective at reducing confidence and flipping predictions when deleted.
+
+At the same time, attention is not purely noise. Its deletion results are consistently stronger than random deletion, indicating that it carries some useful information about the model's behavior. The most accurate summary of our findings is therefore that attention can be informative, but it should not be treated as a faithful or sufficient explanation on its own. Future work could test the same question on more tasks and models, compare additional attribution methods, and analyze whether specific layers or heads provide more reliable signals than the simple last-layer attention summary used here.

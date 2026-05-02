@@ -1,0 +1,78 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Base Model Performance Is Stable Across Seeds}
+
+Before analyzing token importance, we first verify that the classifier itself behaves consistently across random seeds. Table~\ref{tab:validation_metrics} shows the validation metrics for the four runs. Performance is stable, with mean accuracy $0.9074 \pm 0.0052$ and mean F1 $0.9094 \pm 0.0044$. This reduces the risk that the interpretability conclusions are driven by a single outlier run.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Seed & Accuracy & F1 & Loss \\
+\midrule
+42 & 0.9128 & 0.9152 & 0.3180 \\
+43 & 0.9048 & 0.9089 & 0.3474 \\
+44 & 0.9117 & 0.9108 & 0.2759 \\
+45 & 0.9002 & 0.9028 & 0.3766 \\
+\midrule
+Avg. $\pm$ std & 0.9074 $\pm$ 0.0052 & 0.9094 $\pm$ 0.0044 & 0.3295 $\pm$ 0.0372 \\
+\bottomrule
+\end{tabular}
+\caption{Validation performance on SST-2 across four random seeds.}
+\label{tab:validation_metrics}
+\end{table}
+
+\subsection{Attention Has Weak Agreement with Alternative Rankings}
+
+Figure~\ref{fig:similarity_heatmap} summarizes pairwise rank correlation between token-importance methods. Attention agrees only weakly with the alternatives: its mean Spearman correlation is $0.224 \pm 0.011$ against gradient $\times$ input and $0.176 \pm 0.001$ against LOO. Agreement between gradient $\times$ input and LOO is even lower at $0.087 \pm 0.006$.
+
+Two conclusions follow from this result. First, raw attention does not behave like a close surrogate for the more intervention-oriented LOO measure. Second, token importance is itself definition-dependent: even two non-attention alternatives may highlight different aspects of the same prediction. Therefore, if attention is used as an explanation, it should not be assumed to match other attribution methods by default.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig03_ranking_similarity_heatmap.png}
+\caption{Mean Spearman rank correlation between token-ranking methods, aggregated across the four seeds. Agreement is weak, especially between attention and LOO.}
+\label{fig:similarity_heatmap}
+\end{figure}
+
+\subsection{LOO Identifies the Most Disruptive Tokens}
+
+Agreement between rankings is only part of the story. A second question is whether a method identifies tokens whose deletion actually changes the model's behavior. Figure~\ref{fig:deletion_curves} shows the top-$k$ deletion results.
+
+LOO is clearly the strongest method under both evaluation metrics. Deleting the single top LOO-ranked token causes mean confidence drop $0.0383$ and flip rate $0.302$, compared with $0.0138$ and $0.139$ for attention, $0.0073$ and $0.081$ for gradient $\times$ input, and $0.0030$ and $0.038$ for random deletion. The same ordering remains at $k=2$ and $k=3$: LOO remains strongest, attention remains above random, and attention also exceeds gradient $\times$ input in this specific setup.
+
+This pattern is important because it separates two claims. Attention is not a reliable proxy for token importance in the strong sense of matching LOO or ranking tokens similarly to other methods. However, it is not useless either. Its deletion curves show that attention contains non-trivial information about influential tokens, just substantially less than the direct perturbation signal provided by LOO.
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{fig04_confidence_drop_topk.png}
+\caption{Mean confidence drop.}
+\label{fig:confidence_drop}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{fig05_flip_rate_topk.png}
+\caption{Prediction flip rate.}
+\label{fig:flip_rate}
+\end{subfigure}
+\caption{Top-$k$ deletion results aggregated across four seeds. Error bars denote standard deviation across seeds. LOO-selected tokens produce the largest disruption to the classifier, while attention-based deletion is consistently stronger than random deletion and stronger than gradient $\times$ input deletion in this setting.}
+\label{fig:deletion_curves}
+\end{figure*}
+
+\subsection{A Qualitative Case Shows Why Attention Can Mislead}
+
+Figure~\ref{fig:qualitative_case} illustrates a validation example on which the model predicts \emph{positive} for a \emph{negative} gold label. This case is useful because it exposes which tokens most support the model's \emph{actual} decision, even when that decision is wrong.
+
+The sentence contains the word \emph{compelling}, which LOO ranks first. Deleting it reduces the model's positive confidence from $0.9983$ to $0.5009$, showing that it is the most influential word for the mistaken prediction. By contrast, raw attention assigns its highest score to the final period, and deleting that token leaves the prediction almost unchanged. Gradient $\times$ input highlights more content-bearing tokens than attention, but still identifies a much weaker token than LOO in this example. The case therefore matches the aggregate picture: attention can sometimes highlight superficially salient positions without capturing the token that most strongly drives the model output.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{fig06_case_rankings_seed42_idx519.png}
+\caption{Qualitative comparison on validation example 519 from seed 42. The model predicts \emph{positive} with confidence $0.9983$, although the gold label is \emph{negative}. Attention peaks on punctuation, while LOO identifies \emph{compelling} as the token most responsible for the positive prediction.}
+\label{fig:qualitative_case}
+\end{figure*}
