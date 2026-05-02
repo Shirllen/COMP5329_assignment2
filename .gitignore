@@ -3,3 +3,12 @@
 __pycache__/
 *.pyc
 results/
+*.aux
+*.bbl
+*.blg
+*.brf
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
