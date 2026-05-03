@@ -1,0 +1,31 @@
+\section{Supplementary Results}
+\label{sec:appendix}
+
+\subsection{Validation Performance Across Seeds}
+
+Figure~\ref{fig:appendix_validation} provides a visual complement to Table~\ref{tab:validation_metrics} in the main paper. All four seeds produce accuracy and F1 within a narrow band around the mean, confirming that the interpretability analysis is not dominated by any single outlier run. The loss subplot additionally shows that seed~44 converges to a noticeably lower loss than seed~45, despite similar accuracy; this illustrates that loss and accuracy are not interchangeable proxies for model quality in this setting.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig02_validation_metrics.png}
+\caption{Per-seed validation metrics with mean reference lines. Accuracy and F1 are tightly clustered across seeds, while loss shows greater variation (range $0.2759$--$0.3766$), suggesting that the decision boundary is stable even when the loss landscape differs across runs.}
+\label{fig:appendix_validation}
+\end{figure}
+
+\subsection{Ratio-Based Deletion Curves}
+
+This section provides ratio-based deletion results as a complement to the fixed top-$k$ analysis in the main paper. Rather than deleting a fixed count of tokens, here we delete the top fraction $r \in \{0.05, 0.10, 0.20\}$ of non-special tokens as ranked by each method, rounding down to at least one token. This setting is useful for longer sentences, where a fixed $k$ may represent a very small fraction of the input.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figA1_confidence_drop_ratio.png}
+\caption{Mean confidence drop under ratio-based deletion, aggregated across four seeds. Error bars denote sample standard deviation across seeds. The method ordering mirrors the top-$k$ results: LOO remains strongest throughout. Notably, gradient $\times$ input and random deletion produce near-zero or negative mean confidence drops at ratio $0.10$, indicating that on average these selections do not reliably reduce model confidence under this setting.}
+\label{fig:appendix_confidence_drop}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figA2_flip_rate_ratio.png}
+\caption{Prediction flip rate under ratio-based deletion, aggregated across four seeds. Error bars denote sample standard deviation across seeds. LOO retains the highest flip rate at every ratio. Attention-based deletion exceeds gradient $\times$ input at ratio $0.20$, consistent with the top-$k$ finding that raw attention contains more deletion-relevant signal than the gradient attribution in this setting.}
+\label{fig:appendix_flip_rate}
+\end{figure}

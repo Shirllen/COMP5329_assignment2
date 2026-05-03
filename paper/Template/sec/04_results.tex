@@ -3,7 +3,7 @@
 
 \subsection{Base Model Performance Is Stable Across Seeds}
 
-Before analyzing token importance, we first verify that the classifier itself behaves consistently across random seeds. Table~\ref{tab:validation_metrics} shows the validation metrics for the four runs. Performance is stable, with mean accuracy $0.9074 \pm 0.0052$ and mean F1 $0.9094 \pm 0.0044$. This reduces the risk that the interpretability conclusions are driven by a single outlier run.
+Before analyzing token importance, we first verify that the classifier itself behaves consistently across random seeds. Table~\ref{tab:validation_metrics} shows the validation metrics for the four runs. Performance is stable, with mean accuracy $0.9074 \pm 0.0060$ and mean F1 $0.9094 \pm 0.0051$. This reduces the risk that the interpretability conclusions are driven by a single outlier run.
 
 \begin{table}[t]
 \centering
@@ -20,12 +20,12 @@ Seed & Accuracy & F1 & Loss \\
 44 & 0.9117 & 0.9108 & 0.2759 \\
 45 & 0.9002 & 0.9028 & 0.3766 \\
 \midrule
-Mean $\pm$ std & 0.9074 $\pm$ 0.0052 & 0.9094 $\pm$ 0.0044 & 0.3295 $\pm$ 0.0372 \\
+Mean $\pm$ std & 0.9074 $\pm$ 0.0060 & 0.9094 $\pm$ 0.0051 & 0.3295 $\pm$ 0.0430 \\
 \bottomrule
 \end{tabular}%
 }
 }
-\caption{Validation performance on SST-2 across four random seeds.}
+\caption{Validation performance on SST-2 across four random seeds. All $\pm$ values report sample standard deviation ($n-1$ denominator).}
 \label{tab:validation_metrics}
 \end{table}
 

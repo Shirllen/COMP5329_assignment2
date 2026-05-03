@@ -3,7 +3,7 @@
 
 \subsection{Task, Model, and Training Setup}
 
-We study binary sentiment classification on the SST-2 task from GLUE~\cite{socher2013recursive,wang2018glue}. The base model is \texttt{distilbert-base-uncased}, a compact distilled version of BERT~\cite{sanh2019distilbert,devlin2019bert}. For each seed in $\{42, 43, 44, 45\}$, we fine-tune the model for $2$ epochs with learning rate $2\times 10^{-5}$, weight decay $0.01$, maximum sequence length $128$, training batch size $16$, and evaluation batch size $32$. We select the best checkpoint for each seed using validation accuracy. The analysis uses the full SST-2 validation split of $872$ examples rather than a small subsample.
+We study binary sentiment classification on the SST-2 task from GLUE~\cite{socher2013recursive,wang2018glue}. The base model is \texttt{distilbert-base-uncased}, a compact distilled version of BERT~\cite{sanh2019distilbert,devlin2019bert}. For each seed in $\{42, 43, 44, 45\}$, we fine-tune the model for $2$ epochs with learning rate $2\times 10^{-5}$, weight decay $0.01$, maximum sequence length $128$, training batch size $16$, and evaluation batch size $32$. We select the best checkpoint for each seed using validation accuracy; with two training epochs this reduces to choosing the better-performing of the two end-of-epoch checkpoints. The analysis uses the full SST-2 validation split of $872$ examples rather than a small subsample. All $\pm$ values throughout the paper report sample standard deviation (denominator $n-1 = 3$).
 
 The implementation is organized as a notebook-driven interface over a modular Python pipeline. Training, evaluation, and interpretability analysis are handled by reusable functions, while saved artifacts include validation metrics, token rankings, ranking-similarity summaries, deletion records, and qualitative cases. Figure~\ref{fig:workflow} summarizes the workflow.
 
@@ -37,7 +37,7 @@ For each token $i$, we delete that token once, re-run the model, and measure the
 \begin{equation}
 s_i^{\text{loo}} = p_{\hat{y}}(x) - p_{\hat{y}}(x_{\setminus i}),
 \end{equation}
-where $x_{\setminus i}$ is the sequence after removing token $i$. This method directly estimates how much the current prediction depends on each token~\cite{li2017erasure}.
+where $x_{\setminus i}$ is the sequence after removing token $i$. This method directly estimates how much the current prediction depends on each token~\cite{li2017erasure}. Scores may be negative when removing a token increases predicted-class probability; such tokens are assigned the lowest importance rank.
 
 \subsection{Evaluation Protocol}
 
